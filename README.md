@@ -9,14 +9,14 @@
 <img src="docs/img/sisPCA.png" alt="Overview" width="600px"/>
 </div>
 
-*sispca* is a Python package designed to learn linear representations capturing variations associated with factors of interest in high-dimensional data. It extends the Principal Component Analysis (PCA) to multiple subspaces and encourage subspace disentanglement by maximizing the Hilbert-Schmidt Independence Criterion (HSIC). The model is implemented in [PyTorch](https://pytorch.org/) and uses the [Lightning framework](https://lightning.ai/docs/pytorch/stable/) for training. See the [documentation](docs/source/index.rst) for more details.
+*sispca* is a Python package designed to learn linear representations capturing variations associated with factors of interest in high-dimensional data. It extends the Principal Component Analysis (PCA) to multiple subspaces and encourage subspace disentanglement by maximizing the Hilbert-Schmidt Independence Criterion (HSIC). The model is implemented in [PyTorch](https://pytorch.org/) and uses the [Lightning framework](https://lightning.ai/docs/pytorch/stable/) for training. See the [documentation](https://sispca.readthedocs.io/en/latest/index.html) for more details.
 
 For more theoretical connections and applications, please refer to our paper [Disentangling Interpretable Factors of Variations with Supervised Independent Subspace Principal Component Analysis](https://openreview.net/forum?id=AFnSMlye5K).
 
 ## Installation
 Via GitHub (latest version):
 ```bash
-pip install git+https://github.com/JiayuSuPKU/
+pip install git+https://github.com/JiayuSuPKU/sispca.git#egg=sispca
 ```
 
 Via PyPI (stable version):
@@ -28,8 +28,10 @@ pip install sispca
 ```python
 from sispca import Supervision, SISPCADataset, SISPCA
 ```
-See tutorial [here](docs/source/tutorials/tutorial_brca.ipynb).
-For additional details, please refer to the [documentation](docs/source/index.rst).
+Tutorials:
+* [Feature selection using sisPCA on the Breast Cancer Wisconsin dataset](docs/source/tutorials/tutorial_brca.ipynb).
+
+For additional details, please refer to the [documentation](https://sispca.readthedocs.io/en/latest/index.html).
 
 
 ## Citation

@@ -17,11 +17,11 @@ dependencies = [
     "torch",
     "lightning",
     "scipy",
-    "sklearn",
+    "scikit-learn",
 ]
 
 [project.urls]
-repository = "https://github.com/JiayuSuPKU/"
+repository = "https://github.com/JiayuSuPKU/sispca"
 
 [tool.setuptools]
 packages.find = {where = ["."], exclude = ["simulation", "docs", "tests"]}

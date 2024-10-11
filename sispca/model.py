@@ -378,7 +378,7 @@ class SISPCA(PCA):
 
 class SISPCAAuto():
     """A wrapper class for sisPCA for fitting with multiple lambda_contrast values.
-    
+
     Adapted from contrastive PCA. Abid et al. (2018).
     https://github.com/abidlabs/contrastive/blob/master/contrastive/__init__.py
     """
@@ -420,18 +420,18 @@ class SISPCAAuto():
             )
             model_perm.fit(batch_size=512, shuffle=True, max_epochs=5, lr=1, early_stopping_patience=None)
             loss = model_perm.history['train_loss_epoch'][-1]
-            
+
             if loss < current_loss:
                 current_loss = loss
                 best_init_order = subspace_order
                 best_dataset_perm = dataset_perm
-        
+
         print(f"Best subspace order: {best_init_order}")
 
         # update the dataset and subspace order
         self.dataset = best_dataset_perm
         self.n_latent_sub = [self.n_latent_sub[i] for i in best_init_order]
-    
+
     def fit(self, **kwargs):
         self.models = []
         self.final_loss = []
@@ -461,7 +461,7 @@ class SISPCAAuto():
 
     def create_affinity_matrix(self, affinity_metric = 'determinant'):
         """Compute the pairwise affinity matrix between results of varying lambda_contrast.
-        
+
         affinity_metric: str, the metric to compute the pairwise subspace affinity on the Grassmann manifold.
             Can be 'determinant' (Fubini-Study), 'asimov', or 'geodesic'.
             See https://uqpyproject.readthedocs.io/en/stable/utilities/distances/grassmann_distances.html.
@@ -513,12 +513,12 @@ class SISPCAAuto():
         # make the affinity matrix symmetric
         affinity = affinity + affinity.T
         self.affinity_matrix = np.nan_to_num(affinity)
-    
+
     def find_spectral_lambdas(self):
         """Aggregate solutions using spectral clustering."""
         affinity = self.affinity_matrix
         lambda_contrast_list = self.lambda_contrast_list
-        
+
         # cluster the solutions based on the affinity matrix
         spectral = cluster.SpectralClustering(n_clusters=self.n_lambda_clu + 1, affinity='precomputed')
         spectral.fit(affinity)
@@ -556,6 +556,6 @@ class SISPCAAuto():
                 results[
                     f'lambda_{self.lambda_contrast_list[exemplar_idx]:.3f}'
                 ] = self.models[exemplar_idx].get_latent_representation()
-        
+
         return results
 

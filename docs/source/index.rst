@@ -40,7 +40,7 @@ The package can be installed via pip:
   $ pip install sispca
 
   # or from github (latest version)
-  $ pip install git+https://github.com/JiayuSuPKU/
+  $ pip install git+https://github.com/JiayuSuPKU/sispca.git#egg=sispca
 
 Tutorials
 -----------
