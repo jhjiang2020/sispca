@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sispca"
+version = "1.0.0"
+description = "Supervised independent subspace principal component analysis"
+authors = [
+  {name = "Jiayu Su"}
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = "<4"
+
+dependencies = [
+    "torch",
+    "lightning",
+    "scipy",
+    "sklearn",
+]
+
+[project.urls]
+repository = "https://github.com/JiayuSuPKU/"
+
+[tool.setuptools]
+packages.find = {where = ["."], exclude = ["simulation", "docs", "tests"]}
