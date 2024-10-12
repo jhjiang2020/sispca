@@ -106,8 +106,17 @@ class SISPCA(PCA):
         self.n_subspace = len(n_latent_sub) # number of subspaces
         self.lambda_contrast = lambda_contrast # weight for the contrastive loss
 
+        # HSIC kernel for the latent space
+        # if linear, solve the HSIC using iterative eigendecomposition
+        assert kernel_subspace in ['linear', 'gaussian'], "Invalid kernel_subspace."
+        self.kernel_subspace = kernel_subspace
+
         # specify the solver
         assert solver in ['eig', 'gd']
+
+        if kernel_subspace == 'gaussian':
+            solver = 'gd' # only gradient descent solver for Gaussian kernel
+
         if self.n_feature > 2895 and solver == 'eig':
             warnings.warn(
                 "torch.linalg.eigh has a numeric issue with more than 2895 features. " \
@@ -129,8 +138,8 @@ class SISPCA(PCA):
 
         # add the supervised target variables info
         self.n_target = dataset.n_target # number of target variables
-        self.target_name_list = dataset.target_name_list # list of target names
-        self.target_kernel_list = dataset.target_kernel_list # list of target kernels
+        self.target_name_list = dataset.target_name_list.copy() # list of target names
+        self.target_kernel_list = dataset.target_kernel_list.copy() # list of target kernels
 
         if self.n_target == (self.n_subspace - 1):
             print(
@@ -143,15 +152,6 @@ class SISPCA(PCA):
             raise ValueError(
                 f"{self.n_subspace} subspaces need at least {self.n_subspace - 1} supervision keys."
             )
-
-        # calculate the effective dimension of each target space
-        target_sdim_list = [torch.linalg.matrix_rank(K).item() for K in self.target_kernel_list]
-        self.target_sdim_list = [min(_sdim, _n_latent) for _sdim, _n_latent in zip(target_sdim_list, n_latent_sub)]
-
-        # HSIC kernel for the latent space
-        # if linear, solve sisPCA using iterative eigendecomposition fit_svd()
-        assert kernel_subspace in ['linear', 'gaussian']
-        self.kernel_subspace = kernel_subspace
 
     def _extract_batch_inputs(self, batch):
         """Helper function to extract batched inputs for training."""
@@ -220,6 +220,12 @@ class SISPCA(PCA):
         U_sub = torch.split(self.U, self.n_latent_sub, dim = -1)
         return list(U_sub)
 
+    def _reorthogonalize_U(self):
+        """Reorthogonalize U per subspace."""
+        with torch.no_grad():
+            U_new_sub_list = [gram_schmidt(U_sub) for U_sub in self._get_U_subspace_list()]
+            self.U.copy_(torch.concat(U_new_sub_list, dim = 1))
+
     def configure_optimizers(self):
         # if using gradient descent, return the optimizer
         if self.solver == 'gd':
@@ -231,12 +237,6 @@ class SISPCA(PCA):
 
     def training_step(self, batch, batch_idx):
         """Training step for sisPCA."""
-        # enforce the orthogonality constraint when using gradient descent
-        if self.solver == 'gd':
-            # convert the projection matrix to orthonormal
-            with torch.no_grad():
-                self.U.copy_(gram_schmidt(self.U))
-
         # calculate and log the loss
         loss_dict = self.loss(batch)
         reg_loss = loss_dict['reg_loss'] # HSIC contrastive loss
@@ -319,18 +319,25 @@ class SISPCA(PCA):
             K_z_list[i] = z_sub_new @ z_sub_new.T
 
         # update U
-        if lr < 1:
-            U_new = (1 - lr) * self.U + lr * torch.concat(U_sub_list, dim = 1)
-            U_new = gram_schmidt(U_new)
-        else:
-            U_new = torch.concat(U_sub_list, dim = 1)
+        U_new = (1 - lr) * self.U + lr * torch.concat(U_sub_list, dim = 1)
         self.U.copy_(U_new)
+
+        if lr < 1:
+            self._reorthogonalize_U()
 
         return {'loss': loss_sum, 'train_loss': loss_sum, 'reg_loss': reg_loss}
 
+    def on_train_epoch_end(self):
+        """At the end of each epoch, reorthogonalize U (for gradient descent)."""
+        if self.solver == 'gd':
+            # self._reorthogonalize_U() # orthonormalize U per subspace
+            # # need to enforce orthogonality of U across subspaces
+            with torch.no_grad():
+                self.U.copy_(gram_schmidt(self.U))
+
     def fit(
         self,
-        batch_size = 256,
+        batch_size = -1,
         shuffle = True,
         max_epochs = 100,
         early_stopping_patience = 5,
@@ -394,6 +401,10 @@ class SISPCAAuto():
         self.n_lambda_clu = n_lambda_clu # number of lambda_contrast clusters to return
         self.lambda_contrast_list = np.concatenate(([0],np.logspace(-1, max_log_lambda_c, n_lambda - 1)))
         self.models = []
+
+        # calculate the effective dimension of each target space
+        target_sdim_list = [torch.linalg.matrix_rank(K).item() for K in dataset.target_kernel_list]
+        self.target_sdim_list = [min(_sdim, _n_latent) for _sdim, _n_latent in zip(target_sdim_list, n_latent_sub)]
 
     def find_best_update_order(self):
         lambda_contrast = self.lambda_contrast_list[-1] # the largest lambda_contrast
@@ -490,7 +501,7 @@ class SISPCAAuto():
         ]
 
         # the effective dimension of each subspace
-        sdim_list = self.models[0].target_sdim_list
+        sdim_list = self.target_sdim_list
 
         # calculate pairwise affinity as the determinant of cross-covariance matrix
         for i in range(n_lambda):
