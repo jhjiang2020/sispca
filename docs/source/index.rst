@@ -1,12 +1,13 @@
-sisPCA - Supervised Independent Subspace Principal Component Analysis
-=====================================================================================================
+Welcome
+=======
 
 .. toctree::
   :maxdepth: 2
   :hidden:
   :caption: Getting Started
 
-  tutorials/tutorial_brca
+  self
+  tutorials/index
 
 .. toctree::
   :maxdepth: 2
@@ -15,7 +16,7 @@ sisPCA - Supervised Independent Subspace Principal Component Analysis
 
   autoapi/sispca/index
 
-*sispca* is a Python package designed to learn linear representations capturing variations associated with factors of interest in high-dimensional data. 
+`SISPCA (Supervised Independent Subspace Principal Component Analysis) <https://github.com/JiayuSuPKU/sispca>`_ is a Python package designed to learn linear representations capturing variations associated with factors of interest in high-dimensional data. 
 It extends the Principal Component Analysis (PCA) to multiple subspaces and encourage subspace disentanglement by maximizing the Hilbert-Schmidt Independence Criterion (HSIC). 
 The model is implemented in `PyTorch <https://pytorch.org/>`_ and uses the `Lightning framework <https://lightning.ai/docs/pytorch/stable/>`_ for training. 
 
@@ -43,10 +44,9 @@ The package can be installed via pip:
   $ pip install git+https://github.com/JiayuSuPKU/sispca.git#egg=sispca
 
 Tutorials
------------
+---------
 
-.. nbgallery::
-  tutorials/tutorial_brca
+See the :ref:`tutorial gallery <gallery>` for examples on how to use the package.
 
 Citation
 -----------
