@@ -7,6 +7,12 @@ from sispca.utils import normalize_col, delta_kernel
 class Supervision():
     """Custom data class for variable used as supervision."""
     def __init__(self, target_data, target_type, target_name = None):
+        """
+        Args:
+            target_data (2D tensor or ndarray): (n_sample, n_dim_target). The target data used as supervision.
+            target_type (str): 'continuous' or 'categorical'. The type of the target data.
+            target_name (str): The name of the target data.
+        """
         self.target_data = target_data # (n_sample, n_dim_target)
         self.target_type = target_type
         self.target_name = target_name
@@ -47,8 +53,7 @@ class Supervision():
 class SISPCADataset(Dataset):
     """Custom dataset for supervised independent subspace PCA (sisPCA)."""
     def __init__(self, data, target_supervision_list: List[Supervision]):
-        """Initialize the dataset.
-
+        """
         Args:
             data (2D tensor): (n_sample, n_feature). Data to run sisPCA on.
             target_supervision_list (list of Supervision): List of Supervision objects.

@@ -35,13 +35,19 @@ class LossHistoryCallback(L.Callback):
 
 class PCA(L.LightningModule):
     """The unsupervised PCA model."""
-    def __init__(self, n_feature, n_latent: int = 10, lr: float = 0.1):
+    def __init__(self, n_feature, n_latent: int = 10, lr: float = 1.0):
+        """
+        Args:
+            n_feature (int): Number of features of the data.
+            n_latent (int): Number of principal components to compute.
+            lr (float): Learning rate for updating U.
+        """
         super().__init__()
         self.n_latent = n_latent # n_pc
         self.n_feature = n_feature # n_feature
         self._data = None # (n_sample, n_feature)
         self.automatic_optimization = False # solve PCA using eigen decomposition
-        self._lr_svd = lr # learning rate for updating U
+        self.lr = lr # learning rate for updating U
 
         # configure U of size (n_feature, n_pc), the parameter to learn
         U_init = gram_schmidt(nn.init.uniform_(torch.zeros(self.n_feature, self.n_latent)))
@@ -64,11 +70,16 @@ class PCA(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         """Training step for PCA."""
-        lr = self._lr_svd
+        lr = self.lr
 
         # update U using eigendecomposition
         _, _, V = torch.svd_lowrank(batch, self.n_latent)
         U_new = (1 - lr) * self.U + lr * V
+
+        # orthonormalize U
+        if lr < 1:
+            U_new = gram_schmidt(U_new)
+
         self.U.copy_(U_new) # (n_feature, num_pc)
 
         loss = self.loss(batch)
@@ -90,8 +101,7 @@ class SISPCA(PCA):
             kernel_subspace = 'linear',
             solver = 'eig',
         ):
-        """Initialize the model.
-
+        """
         Args:
             dataset (SISPCADataset): The dataset with supervision for sisPCA.
             n_latent_sub (list of int): Number of PCs in each subspace.
@@ -390,6 +400,15 @@ class SISPCAAuto():
     https://github.com/abidlabs/contrastive/blob/master/contrastive/__init__.py
     """
     def __init__(self, dataset, n_latent_sub, max_log_lambda_c, n_lambda, n_lambda_clu, **kwargs):
+        """
+        Args:
+            dataset (SISPCADataset): The dataset with supervision for sisPCA.
+            n_latent_sub (list of int): Number of PCs in each subspace.
+            max_log_lambda_c (float): Maximum log10 lambda_contrast value.
+            n_lambda (int): Number of lambda_contrast values to search.
+            n_lambda_clu (int): Number of lambda_contrast clusters to return.
+            **kwargs: Additional keyword arguments for sisPCA
+        """
         self.dataset = dataset
         self.n_latent_sub = n_latent_sub
         self.n_subspace = len(n_latent_sub)

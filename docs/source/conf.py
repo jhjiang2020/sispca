@@ -26,6 +26,7 @@ extensions = [
 
 autoapi_dirs = ['../../sispca']
 autoapi_add_toctree_entry = False
+autoapi_python_class_content = 'both'
 
 
 intersphinx_mapping = {
