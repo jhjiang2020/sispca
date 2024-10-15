@@ -43,10 +43,30 @@ The package can be installed via pip:
   # or from github (latest version)
   $ pip install git+https://github.com/JiayuSuPKU/sispca.git#egg=sispca
 
+The following dependencies will be installed automatically:
+
+.. code-block:: text
+
+  torch # may need to install with specific python version
+  lightning
+  scipy
+  scikit-learn
+
+In addition to the linear PCA models, we also re-implemented non-linear VAE-based counterparts in `sispca.hcv_vi` following 
+the `HCV paper (Lopez et al. 2018) <https://github.com/romain-lopez/HCV/tree/master>`_ under the latest `scvi-tools framework <https://docs.scvi-tools.org/en/stable/index.html>`_ (version 1.2.0).
+To run those models, you need to also install the following dependencies:
+
+.. code-block:: zsh
+
+  $ pip install scanpy
+  $ pip install scvi-tools
+
+Please refer to the `scvi-tools documentation <https://docs.scvi-tools.org/en/stable/installation.html>`_ for installation instruction.
+
 Tutorials
 ---------
 
-See the :ref:`tutorial gallery <gallery>` for examples on how to use the package.
+See the :ref:`Tutorial Gallery <gallery>` for examples on how to use the package.
 
 Citation
 -----------

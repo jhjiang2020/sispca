@@ -160,7 +160,7 @@ class SISPCA(PCA):
 
         elif self.n_target != self.n_subspace:
             raise ValueError(
-                f"{self.n_subspace} subspaces need at least {self.n_subspace - 1} supervision keys."
+                f"{self.n_subspace} subspaces supplied with {self.n_target} supervision targets."
             )
 
     def _extract_batch_inputs(self, batch):
@@ -362,12 +362,17 @@ class SISPCA(PCA):
 
         # update the learning rate for the eigendecomposition
         if lr is not None:
-            assert (lr <= 1) or self.solver == 'gd', "lr should be less than 1 for eigendecomposition."
+            if self.solver == 'eig':
+                assert (lr <= 1.0), "lr should be less than 1 for eigendecomposition."
+                if lr < 1:
+                    warnings.warn("Untested partial update. Proceed with caution.")
         else:
             if self.solver == 'gd':
                 lr = 100
             else:
-                lr = batch_size / self.n_sample
+                lr = 1.0
+                # TODO: incremental SVD update with minibatch
+                # lr = batch_size / self.n_sample
         self.lr = lr
 
         loss_history_callback = LossHistoryCallback()
@@ -399,7 +404,10 @@ class SISPCAAuto():
     Adapted from contrastive PCA. Abid et al. (2018).
     https://github.com/abidlabs/contrastive/blob/master/contrastive/__init__.py
     """
-    def __init__(self, dataset, n_latent_sub, max_log_lambda_c, n_lambda, n_lambda_clu, **kwargs):
+    def __init__(
+        self, dataset, n_latent_sub, max_log_lambda_c, n_lambda, n_lambda_clu,
+        target_sdim_list = None, **kwargs
+    ):
         """
         Args:
             dataset (SISPCADataset): The dataset with supervision for sisPCA.
@@ -407,6 +415,8 @@ class SISPCAAuto():
             max_log_lambda_c (float): Maximum log10 lambda_contrast value.
             n_lambda (int): Number of lambda_contrast values to search.
             n_lambda_clu (int): Number of lambda_contrast clusters to return.
+            target_sdim_list (list of int): Effective dimension of each target space.
+                If None, will re-compute the rank of the target kernel.
             **kwargs: Additional keyword arguments for sisPCA
         """
         self.dataset = dataset
@@ -422,7 +432,21 @@ class SISPCAAuto():
         self.models = []
 
         # calculate the effective dimension of each target space
-        target_sdim_list = [torch.linalg.matrix_rank(K).item() for K in dataset.target_kernel_list]
+        if target_sdim_list is None:
+            target_sdim_list = [torch.linalg.matrix_rank(K).item() for K in dataset.target_kernel_list]
+        else:
+            assert len(target_sdim_list) == dataset.n_target, \
+                "The target_sdim_list should have the same length as the number of targets."
+            target_sdim_list = target_sdim_list.copy()
+
+        # add the dimension of the unsupervised subspace if necessary
+        if len(target_sdim_list) == (self.n_subspace - 1):
+            target_sdim_list.append(dataset.n_sample)
+        elif len(target_sdim_list) != self.n_subspace:
+            raise ValueError(
+                f"{self.n_subspace} subspaces supplied with {len(target_sdim_list)} supervision targets."
+            )
+
         self.target_sdim_list = [min(_sdim, _n_latent) for _sdim, _n_latent in zip(target_sdim_list, n_latent_sub)]
 
     def find_best_update_order(self):

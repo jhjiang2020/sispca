@@ -25,11 +25,14 @@ pip install sispca
 ```
 
 ## Getting Started
+Basic usage:
 ```python
 from sispca import Supervision, SISPCADataset, SISPCA
 ```
 Tutorials:
 * [Feature selection using sisPCA on the Breast Cancer Wisconsin dataset](docs/source/tutorials/tutorial_brca.ipynb).
+* [Learning unsupervised residual subspace in simulation](docs/source/tutorials/tutorial_donut.ipynb).
+* [Learning interpretable infection subspaces in scRNA-seq data using sisPCA](docs/source/tutorials/tutorial_scrna_pca.ipynb).
 
 For additional details, please refer to the [documentation](https://sispca.readthedocs.io/en/latest/index.html).
 
