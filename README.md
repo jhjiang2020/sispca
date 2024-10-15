@@ -1,5 +1,5 @@
 # Supervised Independent Subspace Principal Component Analysis (sisPCA)
-
+[![DOI](https://zenodo.org/badge/871005850.svg)](https://doi.org/10.5281/zenodo.13932661)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 <!-- ![Overview](/docs/img/sisPCA.png) -->
