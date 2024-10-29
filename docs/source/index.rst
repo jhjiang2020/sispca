@@ -63,6 +63,41 @@ To run those models, you need to also install the following dependencies:
 
 Please refer to the `scvi-tools documentation <https://docs.scvi-tools.org/en/stable/installation.html>`_ for installation instruction.
 
+Basic usage
+-----------
+.. code-block:: python
+
+  import numpy as np
+  import torch
+  from sispca import Supervision, SISPCADataset, SISPCA
+
+  # simulate random inputs
+  x = torch.randn(100, 20)
+  y_cont = torch.randn(100, 5) # continuous target
+  y_group = np.random.choice(['A', 'B', 'C'], 100) # categorical target
+  L = torch.randn(100, 20)
+  K_y = L @ L.T # custom kernel, (n_sample, n_sample)
+
+  # create a dataset with supervision
+  sdata = SISPCADataset(
+      data = x.float(), # (n_sample, n_feature)
+      target_supervision_list = [
+          Supervision(target_data=y_cont, target_type='continuous'),
+          Supervision(target_data=y_group, target_type='categorical'),
+          Supervision(target_data=None, target_type='custom', target_kernel = K_y)
+      ]
+  )
+
+  # fit the sisPCA model
+  sispca = SISPCA(
+      sdata, 
+      n_latent_sub=[3, 3, 3, 3], # the last subspace will be unsupervised 
+      lambda_contrast=10,
+      kernel_subspace='linear',
+      solver='eig'
+  )
+  sispca.fit(batch_size = -1, max_epochs = 100, early_stopping_patience = 5)
+
 Tutorials
 ---------
 
