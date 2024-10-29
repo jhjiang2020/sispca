@@ -34,6 +34,7 @@ class TestPCA(unittest.TestCase):
 
 class TestSISPCAEig(unittest.TestCase):
     def setUp(self):
+        L = torch.randn(100, 20)
         self.dataset = SISPCADataset(
             data=torch.randn(100, 20),
             target_supervision_list=[
@@ -44,10 +45,15 @@ class TestSISPCAEig(unittest.TestCase):
                 Supervision(
                     target_data=np.random.choice(['A', 'B', 'C'], 100),
                     target_type='categorical'
-                )
+                ),
+                Supervision(
+                    target_data=None,
+                    target_type='custom',
+                    target_kernel=(L @ L.T)
+                ),
             ]
         )
-        self.n_latent_sub = [10, 10]
+        self.n_latent_sub = [5, 5, 5, 5]
         self.lambda_contrast = 1.0
         self.kernel_subspace = 'linear'
         self.solver = 'eig'
@@ -92,7 +98,7 @@ class TestSISPCAEig(unittest.TestCase):
 
         # (1) run PCA through svd
         u, s, _ = torch.linalg.svd(
-            normalize_col(pca_data, center = True, scale = False), 
+            normalize_col(pca_data, center = True, scale = False),
             full_matrices=False
         )
         pca_rep_1 = (u @ torch.diag(s))[:, :10]
@@ -155,7 +161,7 @@ class TestSISPCAGd(TestSISPCAEig):
         reg_loss = loss_dict['reg_loss'] # HSIC contrastive loss
         loss_sum = sum(loss_dict['recon_loss']) + reg_loss
         self.assertIsInstance(loss_sum, torch.Tensor)
-        
+
         # check loss back propagation
         loss_sum.backward()
         self.assertTrue(self.sispca.U.grad is not None)

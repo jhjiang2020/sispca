@@ -28,6 +28,7 @@ class TestSISPCADataset(unittest.TestCase):
         target_supervision_list = [
             Supervision(target_data=np.array(['1', '1', '2', '3']), target_type='categorical'),
             Supervision(target_data=np.random.randn(4, 2), target_type='continuous'),
+            Supervision(target_data=None, target_type='custom', target_kernel=(data @ data.T)),
         ]
         self.dataset = SISPCADataset(data=data, target_supervision_list=target_supervision_list)
 
