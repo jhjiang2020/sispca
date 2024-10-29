@@ -272,6 +272,7 @@ class SISPCA(PCA):
         lr = self.lr
 
         # extract batched inputs
+        # TODO: calculate x.T @ K_y @ x using low-rank decomposition of K_y
         index, x, target_kernel_list = self._extract_batch_inputs(batch)
 
         # split U into subspaces
@@ -279,21 +280,29 @@ class SISPCA(PCA):
 
         # calculate representation and kernel in each subspace
         z_sub_list = [x @ U_sub for U_sub in U_sub_list]
-        K_z_list = [_z_i @ _z_i.T for _z_i in z_sub_list]
 
-        K_y_hat_list = []
+        # this is more efficient than realizing K_z and K_y_hat each time
+        xt_z_sub_list = [x.T @ z_sub for z_sub in z_sub_list] # list of (n_feature, n_latent_sub)
+        xt_K_z_x_list = [xt_z @ xt_z.T for xt_z in xt_z_sub_list] # list of (n_feature, n_feature)
+
+        # store eigenvalue of each subspace dimension
+        eigval_sub_list = []
+
         # update U using eigendecomposition for each subspace
         for i, _K_target in enumerate(target_kernel_list):
-            K_y_hat = _K_target - self.lambda_contrast/2 * sum(
-                K_z_list[:i] + K_z_list[(i+1):]
-            )
-            # centering the kernel
-            K_y_hat = K_y_hat - K_y_hat.mean(dim=0).unsqueeze(0)
-            K_y_hat = K_y_hat - K_y_hat.mean(dim=1).unsqueeze(1)
-            K_y_hat_list.append(K_y_hat)
+            # K_y_hat = _K_target - self.lambda_contrast/2 * sum(
+            #     K_z_list[:i] + K_z_list[(i+1):]
+            # )
+            # # centering the kernel
+            # # x has been centered, so no actual need to center K_y_hat
+            # K_y_hat = K_y_hat - K_y_hat.mean(dim=0).unsqueeze(0)
+            # K_y_hat = K_y_hat - K_y_hat.mean(dim=1).unsqueeze(1)
 
             # run eigendecomposition to get the U update
-            mat = x.T @ K_y_hat @ x
+            # mat = x.T @ K_y_hat @ x # (n_feature, n_feature)
+            mat = x.T @ _K_target @ x - self.lambda_contrast/2 * sum(
+                xt_K_z_x_list[:i] + xt_K_z_x_list[(i+1):]
+            ) # (n_feature, n_feature)
             mat += 1e-3 * torch.eye(mat.shape[0])
 
             # # torch.svd_lowrank not stable with rank-one matrix
@@ -310,9 +319,13 @@ class SISPCA(PCA):
             # U_sub_new = U_sub_new[:, :self.n_latent_sub[i]]
 
             # torch.linalg.eigh returns ascending eigenvalues
-            _, V = torch.linalg.eigh(mat)
+            S, V = torch.linalg.eigh(mat)
             U_sub_new = V[:, -self.n_latent_sub[i]:]
             U_sub_new = torch.flip(U_sub_new, [1]) # largest comes first
+
+            # flip and store eigenvalues as well
+            S_new = torch.flip(S[-self.n_latent_sub[i]:], [0]) # largest comes first
+            eigval_sub_list.append(S_new)
 
             # # torch.linalg.eig doesn't sort the eigenvectors
             # _lambda, V = torch.linalg.eig(mat)
@@ -326,11 +339,17 @@ class SISPCA(PCA):
             # update U, subspace representation and the kernel
             U_sub_list[i] = U_sub_new
             z_sub_list[i] = z_sub_new
-            K_z_list[i] = z_sub_new @ z_sub_new.T
+
+            xt_z_sub_new = x.T @ z_sub_new
+            xt_z_sub_list[i] = xt_z_sub_new
+            xt_K_z_x_list[i] = xt_z_sub_new @ xt_z_sub_new.T
 
         # update U
         U_new = (1 - lr) * self.U + lr * torch.concat(U_sub_list, dim = 1)
         self.U.copy_(U_new)
+
+        # store the eigenvalues
+        self._eigval_sub_list = eigval_sub_list
 
         if lr < 1:
             self._reorthogonalize_U()
