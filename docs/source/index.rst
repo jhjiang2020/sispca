@@ -16,16 +16,16 @@ Welcome
 
   autoapi/sispca/index
 
-`SISPCA (Supervised Independent Subspace Principal Component Analysis) <https://github.com/JiayuSuPKU/sispca>`_ is a Python package designed to learn linear representations capturing variations associated with factors of interest in high-dimensional data. 
-It extends the Principal Component Analysis (PCA) to multiple subspaces and encourage subspace disentanglement by maximizing the Hilbert-Schmidt Independence Criterion (HSIC). 
-The model is implemented in `PyTorch <https://pytorch.org/>`_ and uses the `Lightning framework <https://lightning.ai/docs/pytorch/stable/>`_ for training. 
+`SISPCA (Supervised Independent Subspace Principal Component Analysis) <https://github.com/JiayuSuPKU/sispca>`_ is a Python package designed to learn linear representations capturing variations associated with factors of interest in high-dimensional data.
+It extends the Principal Component Analysis (PCA) to multiple subspaces and encourage subspace disentanglement by maximizing the Hilbert-Schmidt Independence Criterion (HSIC).
+The model is implemented in `PyTorch <https://pytorch.org/>`_ and uses the `Lightning framework <https://lightning.ai/docs/pytorch/stable/>`_ for training.
 
 .. image:: ../img/sisPCA.png
   :alt: Overview
   :width: 800
 
-For more theoretical connections and applications, please refer to our paper 
-`Disentangling Interpretable Factors of Variations with Supervised Independent Subspace Principal Component Analysis <https://openreview.net/forum?id=AFnSMlye5K>`_.
+For more theoretical connections and applications, please refer to our paper
+`Disentangling Interpretable Factors with Supervised Independent Subspace Principal Component Analysis <https://arxiv.org/abs/2410.23595>`_.
 
 .. note::
 
@@ -52,7 +52,7 @@ The following dependencies will be installed automatically:
   scipy
   scikit-learn
 
-In addition to the linear PCA models, we also re-implemented non-linear VAE-based counterparts in `sispca.hcv_vi` following 
+In addition to the linear PCA models, we also re-implemented non-linear VAE-based counterparts in `sispca.hcv_vi` following
 the `HCV paper (Lopez et al. 2018) <https://github.com/romain-lopez/HCV/tree/master>`_ under the latest `scvi-tools framework <https://docs.scvi-tools.org/en/stable/index.html>`_ (version 1.2.0).
 To run those models, you need to also install the following dependencies:
 
@@ -90,8 +90,8 @@ Basic usage
 
   # fit the sisPCA model
   sispca = SISPCA(
-      sdata, 
-      n_latent_sub=[3, 3, 3, 3], # the last subspace will be unsupervised 
+      sdata,
+      n_latent_sub=[3, 3, 3, 3], # the last subspace will be unsupervised
       lambda_contrast=10,
       kernel_subspace='linear',
       solver='eig'
@@ -109,13 +109,12 @@ If you find this work useful, please consider citing our paper:
 
 .. code-block:: bibtex
 
-  @inproceedings{
-    su2024disentangling,
-    title={Disentangling Interpretable Factors of Variations with Supervised Independent Subspace Principal Component Analysis},
-    author={Jiayu Su, David A. Knowles, and Raul Rabadan},
-    booktitle={The Thirty-eighth Annual Conference on Neural Information Processing Systems},
+  @misc{su2024disentangling,
+    title={Disentangling Interpretable Factors with Supervised Independent Subspace Principal Component Analysis},
+    author={Jiayu Su and David A. Knowles and Raul Rabadan},
     year={2024},
-    url={https://openreview.net/forum?id=AFnSMlye5K}
+    eprint={2410.23595},
+    archivePrefix={arXiv},
+    primaryClass={stat.ML},
+    url={https://arxiv.org/abs/2410.23595},
   }
-
-
