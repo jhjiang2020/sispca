@@ -134,3 +134,22 @@ def gram_schmidt(x):
     # x_new.T @ x_new == I
     return torch.linalg.qr(x, mode = 'reduced')[0]
 
+class Kernel:
+    def __init__(self, Q):
+        self.Q = Q
+        self.shape = self._shape()
+    
+    def _shape(self): 
+        if isinstance(self.Q, int):
+            return (self.Q, self.Q)
+        return (self.Q.shape[0], self.Q.shape[0])
+
+    def realization(self):
+        if isinstance(self.Q, int):
+            return torch.eye(self.Q)
+        return self.Q @ self.Q.T
+
+    def xtKx(self, x):
+        if isinstance(self.Q, int):
+            return x.T @ x
+        return x.T @ self.Q @ self.Q.T @ x

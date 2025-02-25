@@ -2,7 +2,8 @@ import numpy as np
 from typing import List
 import torch
 from torch.utils.data import Dataset
-from sispca.utils import normalize_col, delta_kernel
+from sispca.utils import normalize_col, delta_kernel, Kernel
+from sklearn.preprocessing import OneHotEncoder
 
 class Supervision():
     """Custom data class for variable used as supervision."""
@@ -75,9 +76,10 @@ class Supervision():
         """Calculate the kernel matrix of the target data."""
         if self.target_type == 'continuous':
             _y = normalize_col(self.target_data, center = True, scale = False).float()
-            self.target_kernel = _y @ _y.t()
+            self.target_kernel = Kernel(_y)
         elif self.target_type == 'categorical':
-            self.target_kernel = delta_kernel(self.target_data)
+            enc = OneHotEncoder()
+            self.target_kernel = Kernel(torch.from_numpy(enc.fit_transform(self.target_data).toarray()).float())
         else:
             raise ValueError("Currently only support 'continuous' or 'categorical' targets.")
 
@@ -129,7 +131,7 @@ class SISPCADataset(Dataset):
         for (_name, _target_data) in zip(
             self.target_name_list, self.target_data_list
         ):
-            if _target_data is not None:
+            if (_target_data is not None):
                 sample[f"target_data_{_name}"] = _target_data[idx,:]
             else:
                 sample[f"target_data_{_name}"] = torch.empty(0)
