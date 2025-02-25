@@ -186,7 +186,8 @@ class SISPCA(PCA):
         # extract the latent representation
         z = self(x) # (batch_size, n_latent)
         n_sample = z.shape[0]
-        
+        #H = torch.eye(n_sample) - 1/n_sample # centering matrix
+
         # center the representation
         z = normalize_col(z, center = True, scale = (self.kernel_subspace == 'gaussian'))
 
@@ -254,11 +255,6 @@ class SISPCA(PCA):
         self.log('train_loss_epoch', loss_sum, on_step=False, on_epoch=True)
         self.log('reg_loss_step', reg_loss, on_step=True, on_epoch=False)
         self.log('reg_loss_epoch', reg_loss, on_step=False, on_epoch=True)
-        # self.log_dict({
-        #     'train_loss': loss_sum,
-        #     'reg_loss': loss_dict['reg_loss']
-        # }, on_step=False, on_epoch=True)
-
 
         # self.log_dict({
         #     'train_loss': loss_sum,
@@ -292,7 +288,7 @@ class SISPCA(PCA):
         eigval_sub_list = []
 
         # update U using eigendecomposition for each subspace
-        for i, K in enumerate(target_kernel_list):
+        for i, _K_target in enumerate(target_kernel_list):
             # K_y_hat = _K_target - self.lambda_contrast/2 * sum(
             #     K_z_list[:i] + K_z_list[(i+1):]
             # )
@@ -303,7 +299,7 @@ class SISPCA(PCA):
 
             # run eigendecomposition to get the U update
             # mat = x.T @ K_y_hat @ x # (n_feature, n_feature)
-            mat = K.xtKx(x) - self.lambda_contrast/2 * sum(
+            mat = _K_target.xtKx(x) - self.lambda_contrast/2 * sum(
                 xt_K_z_x_list[:i] + xt_K_z_x_list[(i+1):]
             ) # (n_feature, n_feature)
             mat += 1e-3 * torch.eye(mat.shape[0])
@@ -457,7 +453,7 @@ class SISPCAAuto():
 
         # calculate the effective dimension of each target space
         if target_sdim_list is None:
-            target_sdim_list = [torch.linalg.matrix_rank(Q @ Q.T).item() for Q in dataset.target_kernel_list]
+            target_sdim_list = [torch.linalg.matrix_rank(K.realization()).item() for K in dataset.target_kernel_list]
         else:
             assert len(target_sdim_list) == dataset.n_target, \
                 "The target_sdim_list should have the same length as the number of targets."
