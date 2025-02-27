@@ -39,16 +39,7 @@ class Supervision():
 
         if self.target_type == 'custom':
             # use pre-calculated kernel matrix and ignore the target data
-            assert self.target_kernel is not None, \
-                "If target_type is 'custom', the target_kernel should be provided."
-
-            # convert the kernel matrix to tensor if ndarray
-            if isinstance(self.target_kernel, np.ndarray):
-                self.target_kernel = torch.from_numpy(self.target_kernel).float()
-
-            # check the shape of the kernel matrix
-            assert self.target_kernel.shape[0] == self.target_kernel.shape[1], \
-                "The kernel matrix should be square."
+            self.target_kernel = Kernel(target_type='custom', target_kernel = self.target_kernel)
 
             # set the target data to None
             self.target_data = None
@@ -76,10 +67,11 @@ class Supervision():
         """Calculate the kernel matrix of the target data."""
         if self.target_type == 'continuous':
             _y = normalize_col(self.target_data, center = True, scale = False).float()
-            self.target_kernel = Kernel(_y)
+            self.target_kernel = Kernel(target_type='continuous', Q = _y)
         elif self.target_type == 'categorical':
             enc = OneHotEncoder()
-            self.target_kernel = Kernel(torch.from_numpy(enc.fit_transform(self.target_data).toarray()).float())
+            _y = torch.from_numpy(enc.fit_transform(self.target_data).toarray()).float() # get the one-hot encoding of the target data
+            self.target_kernel = Kernel(target_type='categorical', Q = _y)
         else:
             raise ValueError("Currently only support 'continuous' or 'categorical' targets.")
 

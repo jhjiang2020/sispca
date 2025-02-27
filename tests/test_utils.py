@@ -34,9 +34,9 @@ class TestKernel(unittest.TestCase):
         # Create a Kernel instance
 		Q = torch.randn(10, 3)
 		Q2 = 10
-		self.kernel = Kernel(Q)
+		self.kernel = Kernel('continuous',Q)
 		self.Q = Q
-		self.kernel_id = Kernel(Q2)
+		self.kernel_id = Kernel('identity', Q2)
 	
 	def test_shape(self):
         # Call the shape attribute

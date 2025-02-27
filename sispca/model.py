@@ -156,7 +156,7 @@ class SISPCA(PCA):
                 f"{self.n_target} supervision variables provided for {self.n_subspace} subspaces. " \
                 "The last subspace will be unsupervised."
             )
-            self.target_kernel_list.append(Kernel(dataset.n_sample))
+            self.target_kernel_list.append(Kernel(target_type='identity', Q = dataset.n_sample))
 
         elif self.n_target != self.n_subspace:
             raise ValueError(
@@ -169,12 +169,15 @@ class SISPCA(PCA):
         # extract the data
         index = batch['index'] # torch tensor
         x = batch['x']
+        ## make sure idx is a tensor
+        if isinstance(index, slice):
+            index = torch.arange(index.start, index.stop, index.step or 1) ## assuming step is 1
 
         # center within the batch
         x = normalize_col(x, center = True, scale = False)
 
         # extract target kernels
-        target_kernel_batch = [Kernel(np.count_nonzero(index)) if isinstance(K.Q, int) else Kernel(K.Q[index, :]) for K in self.target_kernel_list]
+        target_kernel_batch = [K.subset(index) for K in self.target_kernel_list]
 
         return index, x, target_kernel_batch
 
@@ -453,7 +456,7 @@ class SISPCAAuto():
 
         # calculate the effective dimension of each target space
         if target_sdim_list is None:
-            target_sdim_list = [torch.linalg.matrix_rank(K.realization()).item() for K in dataset.target_kernel_list]
+            target_sdim_list = [torch.linalg.matrix_rank(K.Q).item() for K in dataset.target_kernel_list]
         else:
             assert len(target_sdim_list) == dataset.n_target, \
                 "The target_sdim_list should have the same length as the number of targets."
