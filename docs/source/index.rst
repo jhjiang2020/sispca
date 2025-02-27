@@ -71,9 +71,11 @@ Basic usage
   x = torch.randn(100, 20)
   y_cont = torch.randn(100, 5) # continuous target
   y_group = np.random.choice(['A', 'B', 'C'], 100) # categorical target
+
+  # simulate custom kernel K_y
+  # in general, K_y should be either sparse, i.e. a graph Laplacian kernel, or low-rank, i.e. K_y = L @ L.T
   L = torch.randn(100, 20)
-  K_y = L @ L.T # custom kernel, (n_sample, n_sample)
-  # K_y better be sparse for memory efficiency, i.e. a graph Laplacian kernel
+  K_y = L @ L.T # (n_sample, n_sample)
 
   # create a dataset with supervision
   sdata = SISPCADataset(
@@ -81,7 +83,8 @@ Basic usage
       target_supervision_list = [
           Supervision(target_data=y_cont, target_type='continuous'),
           Supervision(target_data=y_group, target_type='categorical'),
-          Supervision(target_data=None, target_type='custom', target_kernel = K_y)
+          # Supervision(target_data=None, target_type='custom', target_kernel_K = K_y)
+          Supervision(target_data=None, target_type='custom', target_kernel_Q = L) # equivalent to the above
       ]
   )
 

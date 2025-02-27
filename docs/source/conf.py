@@ -6,7 +6,7 @@ project = 'sispca'
 copyright = '2024, Jiayu Su'
 author = 'Jiayu Su'
 
-release = 'v1.1.0'
+release = 'v1.1.1'
 
 # -- General configuration
 
