@@ -9,7 +9,7 @@ class TestSupervision(unittest.TestCase):
         supervision = Supervision(
             target_data=np.array([1, 2, 3]), target_type='categorical'
         )
-        self.assertTrue(torch.equal(supervision.target_kernel, torch.eye(3)))
+        self.assertTrue(torch.equal(supervision.target_kernel.realization(), torch.eye(3)))
 
         # Test case 2: continuous target
         x = torch.randn(10, 2)
@@ -19,7 +19,7 @@ class TestSupervision(unittest.TestCase):
         x_new = x - x.mean(0, keepdim = True)
         K_x = x_new @ x_new.T
 
-        self.assertTrue(torch.equal(supervision.target_kernel, K_x))
+        self.assertTrue(torch.equal(supervision.target_kernel.realization(), K_x))
 
 class TestSISPCADataset(unittest.TestCase):
     def setUp(self):

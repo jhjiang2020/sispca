@@ -136,22 +136,31 @@ def gram_schmidt(x):
     return torch.linalg.qr(x, mode = 'reduced')[0]
 
 class Kernel:
-    """Custom data class for more efficient storage of kernels."""
+    """Custom data class for more efficient storage of kernels.
+
+    Usage:
+        kernel = Kernel('continuous', Q = target_data) # K = Q @ Q.T
+        kernel.realization() # return the (n, n) kernel matrix
+        kernel.subset(idx) # return the sub-kernel matrix of shape (m, m) where m = len(idx)
+        kernel.xtKx(x) # return x.T @ K @ x
+    """
     def __init__(self, target_type, Q = None, target_kernel = None):
         """
         Args:
             target_type (str): One of ['continuous', 'categorical', 'identity','custom']. The type of the target data.
                 If 'custom', the target_kernel should be provided.
             Q (int or 2D tensor): If int, Q is the dimension of the identity matrix.
-                                  If 2D tensor, Q is the decomposed matrix (n_obs x n_var) where K = Q @ Q.T.
-            shape (tuple): Shape of the kernel matrix.
+                                  If 2D tensor, Q is the decomposed matrix (n_obs, n_var) where K = Q @ Q.T.
+            target_kernel (2D tensor): The pre-calculated kernel matrix of shape (n_obs, n_obs). 
+                Applied when target_type is 'custom'. Will be stored as a sparse tensor.
         """
         self.target_type = target_type
-        self.Q = Q
-        self.target_kernel = target_kernel
+        self.Q = Q # K = Q @ Q.T
+        self.target_kernel = target_kernel # K or None
 
         self._sanity_check()
-        self.shape = self._shape()
+        self.shape = self._shape() # shape of the kernel matrix
+        self._rank = None # rank of the kernel matrix, will be calculated when needed
     
     def _sanity_check(self):
         # check the target type
@@ -188,6 +197,8 @@ class Kernel:
             # check Q 
             assert self.Q is not None, \
                 "If target_type is 'continuous' or 'categorical', the Q matrix should be provided."
+            assert len(self.Q.shape) == 2, \
+                "The Q matrix should be 2D tensor of shape (n_obs, k)."
     
     def _shape(self): 
         if self.target_type == 'identity':
@@ -222,6 +233,15 @@ class Kernel:
             return Kernel('custom', target_kernel = slice_sparse_matrix(self.target_kernel, idx))
         else:
             return Kernel(self.target_type, Q = self.Q[idx, :])
+
+    def rank(self):
+        """Calculate the rank of the kernel matrix"""
+        if self._rank is None:
+            if self.target_kernel is not None:
+                self._rank = torch.linalg.matrix_rank(self.target_kernel.to_dense()).item()
+            else:
+                self._rank = torch.linalg.matrix_rank(self.Q).item()
+        return self._rank
         
 
 def slice_sparse_matrix(K: torch.sparse_coo_tensor, index: torch.Tensor):

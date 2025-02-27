@@ -129,7 +129,7 @@ class SISPCA(PCA):
 
         if self.n_feature > 2895 and solver == 'eig':
             warnings.warn(
-                "torch.linalg.eigh has a numeric issue with more than 2895 features. " \
+                f"Eigendecomposition of a ({self.n_feature}, {self.n_feature}) may be prohibitively slow. " \
                 "Consider switching to the gradient descent solver."
             )
             self.solver = solver
@@ -456,7 +456,7 @@ class SISPCAAuto():
 
         # calculate the effective dimension of each target space
         if target_sdim_list is None:
-            target_sdim_list = [torch.linalg.matrix_rank(K.Q).item() for K in dataset.target_kernel_list]
+            target_sdim_list = [K.rank() for K in dataset.target_kernel_list]
         else:
             assert len(target_sdim_list) == dataset.n_target, \
                 "The target_sdim_list should have the same length as the number of targets."

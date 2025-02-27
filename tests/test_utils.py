@@ -76,5 +76,11 @@ class TestKernel(unittest.TestCase):
 		result2 = x.T @ torch.eye(10) @ x
 		self.assertTrue(torch.isclose(result, result2, 1e-5).all())
 
+	def test_rank(self):
+		# Call the rank function
+		result = self.kernel.rank()
+		result2 = torch.linalg.matrix_rank(self.Q @ self.Q.T)
+		self.assertEqual(result, result2)
+
 if __name__ == '__main__':
 	unittest.main()
