@@ -200,9 +200,14 @@ class SISPCA(PCA):
         recon_loss_list = []
         # the supervised PCA loss: maximize HSIC in each subspace
         for _z_i, _K in zip(z_sub, target_kernel_list):
-            
+
             if self.kernel_subspace == 'gaussian':
-                recon_loss_i = - torch.trace(gaussian_kernel(_z_i) @ _K.realization()) / (n_sample - 1) ** 2
+                _K_z = gaussian_kernel(_z_i) # the (n_sample, n_sample) dense kernel matrix
+                # center the kernel matrix
+                _K_z = _K_z - _K_z.mean(dim=0, keepdim=True)
+                _K_z = _K_z - _K_z.mean(dim=1, keepdim=True)
+                # compute the supervision loss
+                recon_loss_i = - torch.trace(_K_z @ _K.realization()) / (n_sample - 1) ** 2
             else:
                 recon_loss_i = - torch.trace(_K.xtKx(_z_i)) / (n_sample - 1) ** 2
 
