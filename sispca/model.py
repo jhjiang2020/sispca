@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from sispca.utils import normalize_col, tr_cov, gaussian_kernel, delta_kernel, hsic_gaussian, hsic_linear, gram_schmidt
+from sispca.utils import normalize_col, tr_cov, gaussian_kernel, delta_kernel, hsic_gaussian, hsic_linear, gram_schmidt, Kernel
 from sispca.data import SISPCADataset
 
 class LossHistoryCallback(L.Callback):
@@ -130,9 +130,9 @@ class SISPCA(PCA):
         if self.n_feature > 2895 and solver == 'eig':
             warnings.warn(
                 "torch.linalg.eigh has a numeric issue with more than 2895 features. " \
-                "Switching to the gradient descent solver."
+                "Consider switching to the gradient descent solver."
             )
-            self.solver = 'gd'
+            self.solver = solver
         else:
             self.solver = solver
 
@@ -156,7 +156,7 @@ class SISPCA(PCA):
                 f"{self.n_target} supervision variables provided for {self.n_subspace} subspaces. " \
                 "The last subspace will be unsupervised."
             )
-            self.target_kernel_list.append(torch.eye(dataset.n_sample))
+            self.target_kernel_list.append(Kernel(target_type='identity', Q = dataset.n_sample))
 
         elif self.n_target != self.n_subspace:
             raise ValueError(
@@ -169,12 +169,15 @@ class SISPCA(PCA):
         # extract the data
         index = batch['index'] # torch tensor
         x = batch['x']
+        ## make sure idx is a tensor
+        if isinstance(index, slice):
+            index = torch.arange(index.start, index.stop, index.step or 1) ## assuming step is 1
 
         # center within the batch
         x = normalize_col(x, center = True, scale = False)
 
         # extract target kernels
-        target_kernel_batch = [K[index, :][:, index] for K in self.target_kernel_list]
+        target_kernel_batch = [K.subset(index) for K in self.target_kernel_list]
 
         return index, x, target_kernel_batch
 
@@ -186,7 +189,7 @@ class SISPCA(PCA):
         # extract the latent representation
         z = self(x) # (batch_size, n_latent)
         n_sample = z.shape[0]
-        H = torch.eye(n_sample) - 1/n_sample # centering matrix
+        #H = torch.eye(n_sample) - 1/n_sample # centering matrix
 
         # center the representation
         z = normalize_col(z, center = True, scale = (self.kernel_subspace == 'gaussian'))
@@ -196,14 +199,13 @@ class SISPCA(PCA):
 
         recon_loss_list = []
         # the supervised PCA loss: maximize HSIC in each subspace
-        for _z_i, _target_kernel in zip(z_sub, target_kernel_list):
-            # center the subset target kernel
-            _K = _target_kernel @ H
-
+        for _z_i, _K in zip(z_sub, target_kernel_list):
+            
             if self.kernel_subspace == 'gaussian':
-                recon_loss_i = - torch.trace(gaussian_kernel(_z_i) @ H @ _K) / (n_sample - 1) ** 2
+                recon_loss_i = - torch.trace(gaussian_kernel(_z_i) @ _K.realization()) / (n_sample - 1) ** 2
             else:
-                recon_loss_i = - torch.trace(_z_i.T @ _K @ _z_i) / (n_sample - 1) ** 2
+                recon_loss_i = - torch.trace(_K.xtKx(_z_i)) / (n_sample - 1) ** 2
+
 
             recon_loss_list.append(recon_loss_i)
 
@@ -300,7 +302,7 @@ class SISPCA(PCA):
 
             # run eigendecomposition to get the U update
             # mat = x.T @ K_y_hat @ x # (n_feature, n_feature)
-            mat = x.T @ _K_target @ x - self.lambda_contrast/2 * sum(
+            mat = _K_target.xtKx(x) - self.lambda_contrast/2 * sum(
                 xt_K_z_x_list[:i] + xt_K_z_x_list[(i+1):]
             ) # (n_feature, n_feature)
             mat += 1e-3 * torch.eye(mat.shape[0])
@@ -319,7 +321,9 @@ class SISPCA(PCA):
             # U_sub_new = U_sub_new[:, :self.n_latent_sub[i]]
 
             # torch.linalg.eigh returns ascending eigenvalues
-            S, V = torch.linalg.eigh(mat)
+            #S, V = torch.linalg.eigh(mat)
+            S, V = np.linalg.eigh(mat)
+            S = torch.from_numpy(S)
             U_sub_new = V[:, -self.n_latent_sub[i]:]
             U_sub_new = torch.flip(U_sub_new, [1]) # largest comes first
 
@@ -452,7 +456,7 @@ class SISPCAAuto():
 
         # calculate the effective dimension of each target space
         if target_sdim_list is None:
-            target_sdim_list = [torch.linalg.matrix_rank(K).item() for K in dataset.target_kernel_list]
+            target_sdim_list = [torch.linalg.matrix_rank(K.Q).item() for K in dataset.target_kernel_list]
         else:
             assert len(target_sdim_list) == dataset.n_target, \
                 "The target_sdim_list should have the same length as the number of targets."

@@ -1,3 +1,4 @@
+import warnings
 import torch
 import numpy as np
 
@@ -134,3 +135,132 @@ def gram_schmidt(x):
     # x_new.T @ x_new == I
     return torch.linalg.qr(x, mode = 'reduced')[0]
 
+class Kernel:
+    """Custom data class for more efficient storage of kernels."""
+    def __init__(self, target_type, Q = None, target_kernel = None):
+        """
+        Args:
+            target_type (str): One of ['continuous', 'categorical', 'identity','custom']. The type of the target data.
+                If 'custom', the target_kernel should be provided.
+            Q (int or 2D tensor): If int, Q is the dimension of the identity matrix.
+                                  If 2D tensor, Q is the decomposed matrix (n_obs x n_var) where K = Q @ Q.T.
+            shape (tuple): Shape of the kernel matrix.
+        """
+        self.target_type = target_type
+        self.Q = Q
+        self.target_kernel = target_kernel
+
+        self._sanity_check()
+        self.shape = self._shape()
+    
+    def _sanity_check(self):
+        # check the target type
+        _valid_types = ['continuous', 'categorical', 'identity','custom']
+        assert self.target_type in _valid_types, \
+            f"Currently only support type in {_valid_types}."
+        
+        if self.target_type == 'custom':
+            # use pre-calculated kernel matrix and ignore the target data
+            assert self.target_kernel is not None, \
+                "If target_type is 'custom', the target_kernel should be provided."
+
+            # convert the kernel matrix to tensor if ndarray
+            if isinstance(self.target_kernel, np.ndarray):
+                self.target_kernel = torch.from_numpy(self.target_kernel).float()
+
+            # convert the kernel matrix to sparse
+            if isinstance(self.target_kernel, torch.Tensor):
+                self.target_kernel = self.target_kernel.to_sparse()
+            
+            # check the shape of the kernel matrix
+            assert self.target_kernel.shape[0] == self.target_kernel.shape[1], \
+                "The kernel matrix should be square."
+
+            # set Q to None
+            if self.Q is not None:
+                warnings.warn("Kernel is provided. The Q matrix will be ignored.")
+                self.Q = None
+
+        elif self.target_type == 'identity':
+            assert isinstance(self.Q, int), \
+                "If target_type is 'identity', the dimension (int) should be provided."
+        else:
+            # check Q 
+            assert self.Q is not None, \
+                "If target_type is 'continuous' or 'categorical', the Q matrix should be provided."
+    
+    def _shape(self): 
+        if self.target_type == 'identity':
+            return (self.Q, self.Q)
+        elif self.target_type == 'custom':
+            return (self.target_kernel.shape[0], self.target_kernel.shape[1])
+        else:
+            return (self.Q.shape[0], self.Q.shape[0])
+            
+    def realization(self):
+        if self.target_type == 'identity':
+            return torch.eye(self.Q)
+        elif self.target_type == 'custom':
+            return self.target_kernel
+        else:
+            return self.Q @ self.Q.T
+
+    def xtKx(self, x):
+        # Avoid realising the kernel matrix to save memory
+        if self.target_type == 'identity':
+            return x.T @ x
+        elif self.target_type == 'custom':
+            return x.T @ self.target_kernel @ x
+        else:
+            return x.T @ self.Q @ self.Q.T @ x
+        
+    def subset(self, idx):
+        """Helper function to extract batched inputs for training. idx (tensor) is the index of the batch."""
+        if self.target_type == 'identity':
+            return Kernel('identity', Q = idx.shape[0])
+        elif self.target_type == 'custom':
+            return Kernel('custom', target_kernel = slice_sparse_matrix(self.target_kernel, idx))
+        else:
+            return Kernel(self.target_type, Q = self.Q[idx, :])
+        
+
+def slice_sparse_matrix(K: torch.sparse_coo_tensor, index: torch.Tensor):
+    """
+    Slice a PyTorch sparse matrix `K` by the indices in `index` such that the result is K[index, :][:, index].
+    
+    Args:
+        K: Input sparse matrix (torch.sparse_coo_tensor).
+        index: 1D tensor of row/column indices to slice (torch.Tensor).
+    
+    Returns:
+        A new sparse matrix (torch.sparse_coo_tensor) corresponding to K[index, :][:, index].
+    """
+    # Ensure index is a torch tensor and sorted (for efficient matching)
+    index = index.to(K.indices().device)  # Move index to the same device as K
+    index = torch.unique(index)  # Ensure no duplicate indices (optional, depending on your use case)
+
+    # Extract the indices and values of the sparse matrix
+    row, col = K.indices()
+    values = K.values()
+
+    # Create a mask for rows and columns that match the given indices
+    row_mask = torch.isin(row, index)
+    col_mask = torch.isin(col, index)
+    mask = row_mask & col_mask  # Keep only the elements that match both row and column indices
+
+    # Filter the indices and values based on the mask
+    new_row = row[mask]
+    new_col = col[mask]
+    new_values = values[mask]
+
+    # Map the old indices to the new ones (relative to `index`)
+    index_map = {old_idx.item(): new_idx for new_idx, old_idx in enumerate(index)}
+    new_row = torch.tensor([index_map[r.item()] for r in new_row], device=K.device)
+    new_col = torch.tensor([index_map[c.item()] for c in new_col], device=K.device)
+
+    # Create the new sparse matrix
+    new_size = (len(index), len(index))  # The size of the sliced matrix
+    new_indices = torch.stack([new_row, new_col], dim=0)
+    new_sparse_matrix = torch.sparse_coo_tensor(new_indices, new_values, size=new_size, device=K.device)
+
+    return new_sparse_matrix
