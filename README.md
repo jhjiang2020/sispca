@@ -13,6 +13,10 @@
 
 For more theoretical connections and applications, please refer to our paper [Disentangling Interpretable Factors with Supervised Independent Subspace Principal Component Analysis](https://arxiv.org/abs/2410.23595).
 
+## What's New
+* **v1.1.0** (2025-02-27): Memory-efficient handling of supervision kernel for large datasets.
+* **v1.0.0** (2024-10-11): Initial release.
+
 ## Installation
 Via GitHub (latest version):
 ```bash
@@ -37,6 +41,7 @@ y_cont = torch.randn(100, 5) # continuous target
 y_group = np.random.choice(['A', 'B', 'C'], 100) # categorical target
 L = torch.randn(100, 20)
 K_y = L @ L.T # custom kernel, (n_sample, n_sample)
+# K_y better be sparse for memory efficiency, i.e. a graph Laplacian kernel
 
 # create a dataset with supervision
 sdata = SISPCADataset(
@@ -61,7 +66,8 @@ sispca.fit(batch_size = -1, max_epochs = 100, early_stopping_patience = 5)
 Tutorials:
 * [Feature selection using sisPCA on the Breast Cancer Wisconsin dataset](docs/source/tutorials/tutorial_brca.ipynb).
 * [Learning unsupervised residual subspace in simulation](docs/source/tutorials/tutorial_donut.ipynb).
-* [Learning interpretable infection subspaces in scRNA-seq data using sisPCA](docs/source/tutorials/tutorial_scrna_pca.ipynb).
+* [Learning interpretable infection subspaces in scRNA-seq data using sisPCA](docs/source/tutorials/tutorial_scrna_pca.ipynb). It takes approximately 1 min (M1 Macbook Air) to fit a single sisPCA-linear model on a scRNA-seq dataset with 20,000 cells and 2,000 genes.
+
 
 For additional details, please refer to the [documentation](https://sispca.readthedocs.io/en/latest/index.html).
 

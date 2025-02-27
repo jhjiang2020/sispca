@@ -27,10 +27,6 @@ The model is implemented in `PyTorch <https://pytorch.org/>`_ and uses the `Ligh
 For more theoretical connections and applications, please refer to our paper
 `Disentangling Interpretable Factors with Supervised Independent Subspace Principal Component Analysis <https://arxiv.org/abs/2410.23595>`_.
 
-.. note::
-
-  This documentation is under active development.
-
 Installation
 ------------
 The package can be installed via pip:
@@ -77,6 +73,7 @@ Basic usage
   y_group = np.random.choice(['A', 'B', 'C'], 100) # categorical target
   L = torch.randn(100, 20)
   K_y = L @ L.T # custom kernel, (n_sample, n_sample)
+  # K_y better be sparse for memory efficiency, i.e. a graph Laplacian kernel
 
   # create a dataset with supervision
   sdata = SISPCADataset(
@@ -97,6 +94,19 @@ Basic usage
       solver='eig'
   )
   sispca.fit(batch_size = -1, max_epochs = 100, early_stopping_patience = 5)
+
+
+.. note::
+
+  The computational bottleneck of sispca-linear is the multiple rounds of eigen-decomposition (`numpy.linalg.eigh`)
+  of the matrix of size `(n_feature, n_feature)`, which scales as `O(n_feature^3)`.
+  For large feature sets, consider reducing the number of features.
+
+.. note::
+  The memory bottleneck is the storage of the kernel matrix of size `(n_sample, n_sample)`. 
+  In most cases, we store a low-rank Q from the decomposition K = Q.T @ Q, which scales as `O(n_sample)`.
+  To further reduce memory usage, consider mini-batch training by setting `batch_size` in the `fit` method, although
+  this is an experimental feature and may not converge in some cases.
 
 Tutorials
 ---------
