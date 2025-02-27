@@ -7,26 +7,28 @@ from sklearn.preprocessing import OneHotEncoder
 
 class Supervision():
     """Custom data class for variable used as supervision."""
-    def __init__(self, target_data, target_type, target_name = None, target_kernel = None):
+    def __init__(self, target_data, target_type, target_name = None, target_kernel_K = None, target_kernel_Q = None):
         """
         Args:
             target_data (2D tensor or ndarray): (n_sample, n_dim_target). The target data used as supervision.
             target_type (str): One of ['continuous', 'categorical', 'custom']. The type of the target data.
                 If 'custom', the target_kernel should be provided.
             target_name (str): The name of the target data.
-            target_kernel (2D tensor): (n_sample, n_sample). Optional. The kernel matrix of the target data.
+            target_kernel_K (2D tensor): (n_sample, n_sample). Optional. The kernel matrix of the target data.
                 Once provided, the target_data will be ignored.
+            target_kernel_Q (2D tensor): (n_sample, n_rank). Optional. The decomposed kernel matrix. 
+                K = Q @ Q.T. Will be overriden by target_kernel_K if both are provided.
         """
         self.target_data = target_data # (n_sample, n_dim_target) or None
         self.target_type = target_type
         self.target_name = target_name
-        self.target_kernel = target_kernel # (n_sample, n_sample)
+        self._target_kernel_K = target_kernel_K # (n_sample, n_sample) or None
+        self._target_kernel_Q = target_kernel_Q # (n_sample, n_rank) or None
 
         self._sanity_check()
 
-        # calculate the kernel matrix if not provided
-        if self.target_kernel is None:
-            self._calc_kernel()
+        # compute the kernel matrix from the target data or use the provided kernel matrix
+        self.target_kernel = self._calc_kernel() # an object of Kernel
 
         # save the number of samples
         self.n_sample = self.target_kernel.shape[0]
@@ -38,10 +40,7 @@ class Supervision():
             f"Currently only support type in {_valid_types}."
 
         if self.target_type == 'custom':
-            # use pre-calculated kernel matrix and ignore the target data
-            self.target_kernel = Kernel(target_type='custom', target_kernel = self.target_kernel)
-
-            # set the target data to None
+            # will use pre-calculated kernel matrix and ignore the target data
             self.target_data = None
         else:
             # preprocess the target data for continuous and categorical targets
@@ -63,17 +62,20 @@ class Supervision():
                 "The target data should be 2D tensor with (n_sample, n_dim_target)."
 
     def _calc_kernel(self):
-        # TODO: low-rank approximation for large dataset
-        """Calculate the kernel matrix of the target data."""
+        """Calculate the kernel matrix of the target data.
+        
+        Returns:
+            Kernel: An object of Kernel. Use the realization() method to get the (n, n) kernel matrix.
+        """
         if self.target_type == 'continuous':
             _y = normalize_col(self.target_data, center = True, scale = False).float()
-            self.target_kernel = Kernel(target_type='continuous', Q = _y)
+            return Kernel(target_type='continuous', Q = _y)
         elif self.target_type == 'categorical':
             enc = OneHotEncoder()
             _y = torch.from_numpy(enc.fit_transform(self.target_data).toarray()).float() # get the one-hot encoding of the target data
-            self.target_kernel = Kernel(target_type='categorical', Q = _y)
-        else:
-            raise ValueError("Currently only support 'continuous' or 'categorical' targets.")
+            return Kernel(target_type='categorical', Q = _y)
+        else: # target_type == 'custom'
+            return Kernel(target_type='custom', target_kernel = self._target_kernel_K, Q = self._target_kernel_Q)
 
 class SISPCADataset(Dataset):
     """Custom dataset for supervised independent subspace PCA (sisPCA)."""
@@ -102,7 +104,7 @@ class SISPCADataset(Dataset):
 
         # extract target data and kernel
         self.target_data_list = [t.target_data for t in target_supervision_list]
-        self.target_kernel_list = [t.target_kernel for t in target_supervision_list]
+        self.target_kernel_list = [t.target_kernel for t in target_supervision_list] # list of Kernel objects
 
         # extract target names and replace None with default names
         self.target_name_list = [t.target_name for t in target_supervision_list]

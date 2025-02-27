@@ -21,6 +21,16 @@ class TestSupervision(unittest.TestCase):
 
         self.assertTrue(torch.equal(supervision.target_kernel.realization(), K_x))
 
+        # Test case 3: custom target
+        s1 = Supervision(
+            target_data=None, target_type='custom', target_kernel_K=K_x
+        )
+        s2 = Supervision(
+            target_data=None, target_type='custom', target_kernel_Q=x_new
+        )
+        self.assertTrue(torch.equal(s1.target_kernel.realization(), s2.target_kernel.realization()))
+
+
 class TestSISPCADataset(unittest.TestCase):
     def setUp(self):
         # Create a SisPCADataset instance
@@ -28,7 +38,7 @@ class TestSISPCADataset(unittest.TestCase):
         target_supervision_list = [
             Supervision(target_data=np.array(['1', '1', '2', '3']), target_type='categorical'),
             Supervision(target_data=np.random.randn(4, 2), target_type='continuous'),
-            Supervision(target_data=None, target_type='custom', target_kernel=(data @ data.T)),
+            Supervision(target_data=None, target_type='custom', target_kernel_Q=data),
         ]
         self.dataset = SISPCADataset(data=data, target_supervision_list=target_supervision_list)
 
