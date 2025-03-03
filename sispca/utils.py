@@ -264,3 +264,65 @@ def slice_sparse_matrix(K: torch.sparse_coo_tensor, index: torch.Tensor):
     new_sparse_matrix = torch.sparse_coo_tensor(new_indices, new_values, size=new_size, device=K.device)
 
     return new_sparse_matrix
+
+def setup_contrast_kernel(n_obs, alpha, data):
+    '''
+	Construct a contrastive kernel matrix from the annotation data.
+		Parameters:
+			n_obs: int
+				Number of observations.
+			alpha: float
+				The strength parameter for contrastive PCA.
+			data: list
+				The annotation data, with target group in 1 and background group in -1.
+		Returns:
+			kernel: torch.Tensor					
+				The contrastive kernel stored as sparse matrix.				
+	'''
+    indices = []
+    values = []
+	## make sure n_obs matches the length of data
+    assert n_obs == len(data) \
+		, "The length of annotation should match the number of observations."
+    
+    for i in range(n_obs):
+        if data[i] == 1:
+            indices.append([i, i])
+            values.append(1)
+        elif data[i] == -1:
+            indices.append([i, i])
+            values.append(-alpha)
+
+    indices = torch.tensor(indices).t()
+    values = torch.tensor(values).float()
+    kernel = torch.sparse_coo_tensor(indices, values, (n_obs, n_obs))
+
+    return kernel.coalesce()
+
+def setup_contrast_annot_categorical(annotation, target_group, background_group):
+	'''
+	Setup the contrast based on categorical input .
+		Parameters:
+			annotation: pd.Series
+				The annotation data, should be categorical. 
+			target_group: str
+				The name of the target group.
+			background_group: str
+				The name of the background group.
+		Returns:
+			annot: list
+            	The annotation data, with target group in 1 and background group in -1.
+	'''
+    ## make sure annotation is categorical
+	assert annotation.dtype.name == 'category' \
+		, "The annotation data should be categorical."
+     
+	## make sure target_group and background_group are in annotation
+	assert target_group in annotation.cat.categories \
+		, "The target group should be in the annotation data."
+	assert background_group in annotation.cat.categories \
+		, "The background group should be in the annotation data."
+    
+	annot = [1 if x == target_group else -1 if x == background_group else 0 for x in annotation]
+    
+	return annot
