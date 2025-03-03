@@ -49,7 +49,7 @@ class TestSISPCAEig(unittest.TestCase):
                 Supervision(
                     target_data=None,
                     target_type='custom',
-                    target_kernel=(L @ L.T)
+                    target_kernel_Q=L
                 ),
             ]
         )

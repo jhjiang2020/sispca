@@ -129,7 +129,7 @@ class SISPCA(PCA):
 
         if self.n_feature > 2895 and solver == 'eig':
             warnings.warn(
-                "torch.linalg.eigh has a numeric issue with more than 2895 features. " \
+                f"Eigendecomposition of a ({self.n_feature}, {self.n_feature}) may be prohibitively slow. " \
                 "Consider switching to the gradient descent solver."
             )
             self.solver = solver
@@ -149,7 +149,7 @@ class SISPCA(PCA):
         # add the supervised target variables info
         self.n_target = dataset.n_target # number of target variables
         self.target_name_list = dataset.target_name_list.copy() # list of target names
-        self.target_kernel_list = dataset.target_kernel_list.copy() # list of target kernels
+        self.target_kernel_list = dataset.target_kernel_list.copy() # list of target kernels (Kernel objects)
 
         if self.n_target == (self.n_subspace - 1):
             print(
@@ -200,9 +200,14 @@ class SISPCA(PCA):
         recon_loss_list = []
         # the supervised PCA loss: maximize HSIC in each subspace
         for _z_i, _K in zip(z_sub, target_kernel_list):
-            
+
             if self.kernel_subspace == 'gaussian':
-                recon_loss_i = - torch.trace(gaussian_kernel(_z_i) @ _K.realization()) / (n_sample - 1) ** 2
+                _K_z = gaussian_kernel(_z_i) # the (n_sample, n_sample) dense kernel matrix
+                # center the kernel matrix
+                _K_z = _K_z - _K_z.mean(dim=0, keepdim=True)
+                _K_z = _K_z - _K_z.mean(dim=1, keepdim=True)
+                # compute the supervision loss
+                recon_loss_i = - torch.trace(_K_z @ _K.realization()) / (n_sample - 1) ** 2
             else:
                 recon_loss_i = - torch.trace(_K.xtKx(_z_i)) / (n_sample - 1) ** 2
 
@@ -274,7 +279,6 @@ class SISPCA(PCA):
         lr = self.lr
 
         # extract batched inputs
-        # TODO: calculate x.T @ K_y @ x using low-rank decomposition of K_y
         index, x, target_kernel_list = self._extract_batch_inputs(batch)
 
         # split U into subspaces
@@ -292,15 +296,10 @@ class SISPCA(PCA):
 
         # update U using eigendecomposition for each subspace
         for i, _K_target in enumerate(target_kernel_list):
+            ## run eigendecomposition to get the U update
             # K_y_hat = _K_target - self.lambda_contrast/2 * sum(
             #     K_z_list[:i] + K_z_list[(i+1):]
             # )
-            # # centering the kernel
-            # # x has been centered, so no actual need to center K_y_hat
-            # K_y_hat = K_y_hat - K_y_hat.mean(dim=0).unsqueeze(0)
-            # K_y_hat = K_y_hat - K_y_hat.mean(dim=1).unsqueeze(1)
-
-            # run eigendecomposition to get the U update
             # mat = x.T @ K_y_hat @ x # (n_feature, n_feature)
             mat = _K_target.xtKx(x) - self.lambda_contrast/2 * sum(
                 xt_K_z_x_list[:i] + xt_K_z_x_list[(i+1):]
@@ -321,6 +320,7 @@ class SISPCA(PCA):
             # U_sub_new = U_sub_new[:, :self.n_latent_sub[i]]
 
             # torch.linalg.eigh returns ascending eigenvalues
+            # torch.linalg.eigh has numerical issues when mat is larger than (2895, 2895)
             #S, V = torch.linalg.eigh(mat)
             S, V = np.linalg.eigh(mat)
             S = torch.from_numpy(S)
@@ -330,12 +330,6 @@ class SISPCA(PCA):
             # flip and store eigenvalues as well
             S_new = torch.flip(S[-self.n_latent_sub[i]:], [0]) # largest comes first
             eigval_sub_list.append(S_new)
-
-            # # torch.linalg.eig doesn't sort the eigenvectors
-            # _lambda, V = torch.linalg.eig(mat)
-            # idx = torch.argsort(torch.real(_lambda), descending = True)
-            # V = torch.real(V)[:, idx]
-            # U_sub_new = V[:, :self.n_latent_sub[i]]
 
             # update the subspace representation
             z_sub_new = x @ U_sub_new
@@ -456,7 +450,7 @@ class SISPCAAuto():
 
         # calculate the effective dimension of each target space
         if target_sdim_list is None:
-            target_sdim_list = [torch.linalg.matrix_rank(K.Q).item() for K in dataset.target_kernel_list]
+            target_sdim_list = [K.rank() for K in dataset.target_kernel_list]
         else:
             assert len(target_sdim_list) == dataset.n_target, \
                 "The target_sdim_list should have the same length as the number of targets."

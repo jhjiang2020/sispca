@@ -136,50 +136,66 @@ def gram_schmidt(x):
     return torch.linalg.qr(x, mode = 'reduced')[0]
 
 class Kernel:
-    """Custom data class for more efficient storage of kernels."""
+    """Custom data class for more efficient storage of kernels.
+
+    Usage:
+        kernel = Kernel('continuous', Q = target_data) # K = Q @ Q.T
+        kernel.realization() # return the (n, n) kernel matrix
+        kernel.subset(idx) # return the sub-kernel matrix of shape (m, m) where m = len(idx)
+        kernel.xtKx(x) # return x.T @ K @ x
+    """
     def __init__(self, target_type, Q = None, target_kernel = None):
         """
         Args:
             target_type (str): One of ['continuous', 'categorical', 'identity','custom']. The type of the target data.
                 If 'custom', the target_kernel should be provided.
             Q (int or 2D tensor): If int, Q is the dimension of the identity matrix.
-                                  If 2D tensor, Q is the decomposed matrix (n_obs x n_var) where K = Q @ Q.T.
-            shape (tuple): Shape of the kernel matrix.
+                                  If 2D tensor, Q is the decomposed matrix (n_obs, n_var) where K = Q @ Q.T.
+            target_kernel (2D tensor): The pre-calculated kernel matrix K of shape (n_obs, n_obs). 
+                Applied when target_type is 'custom'. Will overwrite Q if provided.
         """
         self.target_type = target_type
-        self.Q = Q
-        self.target_kernel = target_kernel
+        self.Q = Q # K = Q @ Q.T
+        self.target_kernel = target_kernel # K or None
 
         self._sanity_check()
-        self.shape = self._shape()
+        self.shape = self._shape() # shape of the kernel matrix
+        self._rank = None # rank of the kernel matrix, will be calculated when needed
     
     def _sanity_check(self):
         # check the target type
-        _valid_types = ['continuous', 'categorical', 'identity','custom']
+        _valid_types = ['continuous', 'categorical', 'identity', 'custom']
         assert self.target_type in _valid_types, \
             f"Currently only support type in {_valid_types}."
         
         if self.target_type == 'custom':
             # use pre-calculated kernel matrix and ignore the target data
-            assert self.target_kernel is not None, \
-                "If target_type is 'custom', the target_kernel should be provided."
+            assert (self.target_kernel is not None) or (self.Q is not None), \
+                "One of 'target_kernel' or 'Q' should be provided for custom kernel."
 
-            # convert the kernel matrix to tensor if ndarray
-            if isinstance(self.target_kernel, np.ndarray):
-                self.target_kernel = torch.from_numpy(self.target_kernel).float()
+            if self.target_kernel is not None: # store the target_kernel K directly
+                if self.Q is not None:
+                    # overwrite Q with the target_kernel
+                    warnings.warn("Both 'target_kernel' and 'Q' are provided. 'Q' will be ignored.")
+                    self.Q = None
 
-            # convert the kernel matrix to sparse
-            if isinstance(self.target_kernel, torch.Tensor):
-                self.target_kernel = self.target_kernel.to_sparse()
-            
-            # check the shape of the kernel matrix
-            assert self.target_kernel.shape[0] == self.target_kernel.shape[1], \
-                "The kernel matrix should be square."
+                # convert the kernel matrix to tensor if ndarray
+                if isinstance(self.target_kernel, np.ndarray):
+                    self.target_kernel = torch.from_numpy(self.target_kernel).float()
+                else:
+                    assert isinstance(self.target_kernel, torch.Tensor), \
+                        "The target_kernel should be a 2D tensor."
 
-            # set Q to None
-            if self.Q is not None:
-                warnings.warn("Kernel is provided. The Q matrix will be ignored.")
-                self.Q = None
+                # # convert the kernel matrix to sparse
+                # if isinstance(self.target_kernel, torch.Tensor):
+                #     self.target_kernel = self.target_kernel.to_sparse()
+
+                # check the shape of the kernel matrix
+                assert self.target_kernel.shape[0] == self.target_kernel.shape[1], \
+                    "The kernel matrix should be square."
+            else: # store the decomposed Q
+                assert len(self.Q.shape) == 2, \
+                    "The Q matrix should be 2D tensor of shape (n_obs, k)."
 
         elif self.target_type == 'identity':
             assert isinstance(self.Q, int), \
@@ -188,40 +204,66 @@ class Kernel:
             # check Q 
             assert self.Q is not None, \
                 "If target_type is 'continuous' or 'categorical', the Q matrix should be provided."
+            assert len(self.Q.shape) == 2, \
+                "The Q matrix should be 2D tensor of shape (n_obs, k)."
     
     def _shape(self): 
         if self.target_type == 'identity':
             return (self.Q, self.Q)
-        elif self.target_type == 'custom':
-            return (self.target_kernel.shape[0], self.target_kernel.shape[1])
-        else:
+        elif self.Q is not None: # always use the decomposed Q when available
             return (self.Q.shape[0], self.Q.shape[0])
+        else: # target_type == 'custom' with target_kernel
+            return (self.target_kernel.shape[0], self.target_kernel.shape[1])
             
     def realization(self):
         if self.target_type == 'identity':
             return torch.eye(self.Q)
-        elif self.target_type == 'custom':
-            return self.target_kernel
-        else:
+        elif self.Q is not None: # always use the decomposed Q when available
             return self.Q @ self.Q.T
+        else: # target_type == 'custom' with target_kernel
+            return self.target_kernel
 
     def xtKx(self, x):
         # Avoid realising the kernel matrix to save memory
         if self.target_type == 'identity':
             return x.T @ x
-        elif self.target_type == 'custom':
+        elif self.Q is not None: # always use the decomposed Q when available
+            xtQ = x.T @ self.Q # (n_var, n_obs)
+            return xtQ @ xtQ.T
+        else: # target_type == 'custom' with target_kernel
             return x.T @ self.target_kernel @ x
-        else:
-            return x.T @ self.Q @ self.Q.T @ x
-        
+
     def subset(self, idx):
-        """Helper function to extract batched inputs for training. idx (tensor) is the index of the batch."""
+        """Helper function to extract batched inputs for training. idx (tensor) is the index of the batch.
+        
+        Args:
+            idx: 1D tensor of m indices to subset the kernel matrix.
+        
+        Returns:
+            A new Kernel object with the subsetted kernel matrix of shape (m, m).
+        """
         if self.target_type == 'identity':
             return Kernel('identity', Q = idx.shape[0])
-        elif self.target_type == 'custom':
-            return Kernel('custom', target_kernel = slice_sparse_matrix(self.target_kernel, idx))
-        else:
+        elif self.Q is not None: # always use the decomposed Q when available
             return Kernel(self.target_type, Q = self.Q[idx, :])
+        else: # target_type == 'custom' with target_kernel
+            if self.target_kernel.is_sparse: # special splicing for sparse matrix
+                return Kernel('custom', target_kernel = slice_sparse_matrix(self.target_kernel, idx))
+            else:
+                return Kernel('custom', target_kernel = self.target_kernel[idx, :][:, idx])
+
+    def rank(self):
+        """Calculate the rank of the kernel matrix"""
+        if self._rank is None:
+            if self.Q is not None: # always use the decomposed Q when available
+                self._rank = torch.linalg.matrix_rank(self.Q).item()
+            else: # target_type == 'custom' with target_kernel
+                if self.target_kernel.is_sparse:
+                    self._rank = torch.linalg.matrix_rank(self.target_kernel.to_dense()).item()
+                else:
+                    self._rank = torch.linalg.matrix_rank(self.target_kernel).item()
+
+        return self._rank
         
 
 def slice_sparse_matrix(K: torch.sparse_coo_tensor, index: torch.Tensor):

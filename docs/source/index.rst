@@ -27,10 +27,6 @@ The model is implemented in `PyTorch <https://pytorch.org/>`_ and uses the `Ligh
 For more theoretical connections and applications, please refer to our paper
 `Disentangling Interpretable Factors with Supervised Independent Subspace Principal Component Analysis <https://arxiv.org/abs/2410.23595>`_.
 
-.. note::
-
-  This documentation is under active development.
-
 Installation
 ------------
 The package can be installed via pip:
@@ -75,8 +71,11 @@ Basic usage
   x = torch.randn(100, 20)
   y_cont = torch.randn(100, 5) # continuous target
   y_group = np.random.choice(['A', 'B', 'C'], 100) # categorical target
+
+  # simulate custom kernel K_y
+  # in general, K_y should be either sparse, i.e. a graph Laplacian kernel, or low-rank, i.e. K_y = L @ L.T
   L = torch.randn(100, 20)
-  K_y = L @ L.T # custom kernel, (n_sample, n_sample)
+  K_y = L @ L.T # (n_sample, n_sample)
 
   # create a dataset with supervision
   sdata = SISPCADataset(
@@ -84,7 +83,8 @@ Basic usage
       target_supervision_list = [
           Supervision(target_data=y_cont, target_type='continuous'),
           Supervision(target_data=y_group, target_type='categorical'),
-          Supervision(target_data=None, target_type='custom', target_kernel = K_y)
+          # Supervision(target_data=None, target_type='custom', target_kernel_K = K_y)
+          Supervision(target_data=None, target_type='custom', target_kernel_Q = L) # equivalent to the above
       ]
   )
 
@@ -97,6 +97,19 @@ Basic usage
       solver='eig'
   )
   sispca.fit(batch_size = -1, max_epochs = 100, early_stopping_patience = 5)
+
+
+.. note::
+
+  The computational bottleneck of sispca-linear is the multiple rounds of eigen-decomposition (`numpy.linalg.eigh`)
+  of the matrix of size `(n_feature, n_feature)`, which scales as `O(n_feature^3)`.
+  For large feature sets, consider reducing the number of features.
+
+.. note::
+  The memory bottleneck is the storage of the kernel matrix of size `(n_sample, n_sample)`. 
+  In most cases, we store a low-rank Q from the decomposition K = Q.T @ Q, which scales as `O(n_sample)`.
+  To further reduce memory usage, consider mini-batch training by setting `batch_size` in the `fit` method, although
+  this is an experimental feature and may not converge in some cases.
 
 Tutorials
 ---------
