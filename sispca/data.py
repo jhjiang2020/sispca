@@ -7,12 +7,15 @@ from sklearn.preprocessing import OneHotEncoder
 
 class Supervision():
     """Custom data class for variable used as supervision."""
-    def __init__(self, target_data, target_type, target_name = None, target_kernel_K = None, target_kernel_Q = None):
+    def __init__(self, target_data, target_type, target_drop = None,  target_name = None, target_kernel_K = None, target_kernel_Q = None):
         """
         Args:
             target_data (2D tensor or ndarray): (n_sample, n_dim_target). The target data used as supervision.
             target_type (str): One of ['continuous', 'categorical', 'custom']. The type of the target data.
                 If 'custom', the target_kernel should be provided.
+            target_drop (ndarray of boolean or list of unique values in target_data): Optional. The columns to drop in the target data.
+                If boolean, drop the target data with True. 
+                If list, drop the target data with the values in the list.
             target_name (str): The name of the target data.
             target_kernel_K (2D tensor): (n_sample, n_sample). Optional. The kernel matrix of the target data.
                 Once provided, the target_data will be ignored.
@@ -21,6 +24,7 @@ class Supervision():
         """
         self.target_data = target_data # (n_sample, n_dim_target) or None
         self.target_type = target_type
+        self.target_drop = target_drop
         self.target_name = target_name
         self._target_kernel_K = target_kernel_K # (n_sample, n_sample) or None
         self._target_kernel_Q = target_kernel_Q # (n_sample, n_rank) or None
@@ -46,6 +50,21 @@ class Supervision():
             # preprocess the target data for continuous and categorical targets
             if len(self.target_data.shape) == 1:
                 self.target_data = self.target_data[:, None] # (n_sample, 1)
+                # make sure target_drop is correctly defined if provided
+                if self.target_drop is not None:
+                    assert isinstance(self.target_drop, (list, np.ndarray)), \
+                        "target_drop should be list or ndarray."
+                    # if target_drop is a list, convert it to boolean array
+                    if isinstance(self.target_drop, list):
+                        # make sure the values in target_drop are also in the target_data
+                        assert all(i in self.target_data for i in self.target_drop), \
+                            "The values in target_drop should be in the target_data."
+                        self.target_drop = np.array([i in self.target_drop for i in range(self.target_data.shape[1])])
+                    elif isinstance(self.target_drop, np.ndarray):
+                        assert self.target_drop.shape[0] == self.target_data.shape[0], \
+                            "The shape of target_drop should be (n_sample,)."
+                        assert self.target_drop.dtype == bool, \
+                            "The target_drop should be boolean array."
 
             if isinstance(self.target_data, np.ndarray):
                 # convert categorical string to integer
@@ -68,11 +87,21 @@ class Supervision():
             Kernel: An object of Kernel. Use the realization() method to get the (n, n) kernel matrix.
         """
         if self.target_type == 'continuous':
-            _y = normalize_col(self.target_data, center = True, scale = False).float()
+            ## set the dropped rows to the mean of the remaining target data
+            if self.target_drop is not None:
+                _mean = torch.mean(self.target_data[~self.target_drop], dim = 0)
+                target_data = self.target_data.clone() ## do not modify the original target_data
+                target_data[self.target_drop] = _mean
+                _y = normalize_col(target_data, center = True, scale = False).float()
+            else:
+                _y = normalize_col(self.target_data, center = True, scale = False).float()
             return Kernel(target_type='continuous', Q = _y)
         elif self.target_type == 'categorical':
             enc = OneHotEncoder()
             _y = torch.from_numpy(enc.fit_transform(self.target_data).toarray()).float() # get the one-hot encoding of the target data
+            if self.target_drop is not None:
+                # mask the _y with zeros for the dropped rows
+                _y[self.target_drop] = torch.zeros_like(_y[self.target_drop])
             return Kernel(target_type='categorical', Q = _y)
         else: # target_type == 'custom'
             return Kernel(target_type='custom', target_kernel = self._target_kernel_K, Q = self._target_kernel_Q)
