@@ -150,6 +150,7 @@ class SISPCA(PCA):
         self.n_target = dataset.n_target # number of target variables
         self.target_name_list = dataset.target_name_list.copy() # list of target names
         self.target_kernel_list = dataset.target_kernel_list.copy() # list of target kernels (Kernel objects)
+        self.contrast_subspace_list = dataset.contrast_subspace_list.copy() # list of subspaces to apply HSIC loss
 
         if self.n_target == (self.n_subspace - 1):
             print(
@@ -157,11 +158,23 @@ class SISPCA(PCA):
                 "The last subspace will be unsupervised."
             )
             self.target_kernel_list.append(Kernel(target_type='identity', Q = dataset.n_sample))
-
+            self.contrast_subspace_list.append(len(set(self.contrast_subspace_list))) # add the unsupervised subspace
         elif self.n_target != self.n_subspace:
             raise ValueError(
                 f"{self.n_subspace} subspaces supplied with {self.n_target} supervision targets."
             )
+        
+        # recover the lambda_contrast matrix 
+        # lambda=0 if subspace i and j belong to the same contrast_subspace as in contrast_subspace_list
+        # lambda = lambda_contrast if subspace i and j belong to different contrast_subspace
+        lambda_contrast_matrix = torch.zeros(self.n_subspace, self.n_subspace)
+        for i in range(self.n_subspace):
+            for j in range(i + 1, self.n_subspace):
+                if self.contrast_subspace_list[i] != self.contrast_subspace_list[j]:
+                    lambda_contrast_matrix[i, j] = self.lambda_contrast
+                    lambda_contrast_matrix[j, i] = self.lambda_contrast
+        self.lambda_contrast = lambda_contrast_matrix
+
 
     def _extract_batch_inputs(self, batch):
         """Helper function to extract batched inputs for training."""
@@ -216,16 +229,23 @@ class SISPCA(PCA):
 
         reg_loss = torch.tensor(0.0)
         # the contrastive loss: minimize HSIC between subspaces
-        if self.lambda_contrast > 0:
+        if self.lambda_contrast.min() > 0:
             for i in range(self.n_subspace):
                 for j in range(i + 1, self.n_subspace):
+                    # get lambda for subspace i and j
+                    lambda_contrast_ij = self.lambda_contrast[i, j]
+                    
+                    if lambda_contrast_ij == 0:
+                        continue
+
+                    # get the subspace representation        
                     z_1 = z_sub[i]
                     z_2 = z_sub[j]
 
                     if self.kernel_subspace == 'gaussian':
-                        reg_loss += self.lambda_contrast * hsic_gaussian(z_1, z_2)
+                        reg_loss += lambda_contrast_ij * hsic_gaussian(z_1, z_2)
                     else:
-                        reg_loss += self.lambda_contrast * hsic_linear(z_1, z_2)
+                        reg_loss += lambda_contrast_ij * hsic_linear(z_1, z_2)
 
         return {
             'recon_loss': recon_loss_list,
@@ -301,9 +321,10 @@ class SISPCA(PCA):
             #     K_z_list[:i] + K_z_list[(i+1):]
             # )
             # mat = x.T @ K_y_hat @ x # (n_feature, n_feature)
-            mat = _K_target.xtKx(x) - self.lambda_contrast/2 * sum(
-                xt_K_z_x_list[:i] + xt_K_z_x_list[(i+1):]
+            mat = _K_target.xtKx(x) - sum(
+                self.lambda_contrast[i,j]/2 * xt_K_z_x_list[j]  for j in range(self.n_subspace) if j != i
             ) # (n_feature, n_feature)
+            # chage this to a weighted sum xt_K_z_x_list[j] * lambda_contrast[i,j] for j != i
             mat += 1e-3 * torch.eye(mat.shape[0])
 
             # # torch.svd_lowrank not stable with rank-one matrix

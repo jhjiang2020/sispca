@@ -108,11 +108,14 @@ class Supervision():
 
 class SISPCADataset(Dataset):
     """Custom dataset for supervised independent subspace PCA (sisPCA)."""
-    def __init__(self, data, target_supervision_list: List[Supervision]):
+    def __init__(self, data, target_supervision_list: List[Supervision], contrast_subspace_list = None):
         """
         Args:
             data (2D tensor): (n_sample, n_feature). Data to run sisPCA on.
             target_supervision_list (list of Supervision): List of Supervision objects.
+            contrast_subspace_list (list of int or list of str): which independent subspace each supervision belongs to.
+                If None, all the supervision will be treated as the different class and subject to HSIC loss.
+                Supervisions that share the same value will be treated as the same class and will not incur within-class HSIC loss.
         """
         if isinstance(data, np.ndarray):
             data = torch.from_numpy(data).float()
@@ -130,6 +133,17 @@ class SISPCADataset(Dataset):
         # the supervised variable (target)
         self.target_supervision_list = target_supervision_list
         self.n_target = len(target_supervision_list)
+
+        if contrast_subspace_list is None:
+            self.contrast_subspace_list = [i for i in range(self.n_target)]
+        else:
+            # sanity check for contrast_subspace_list
+            _n_class = len(set(contrast_subspace_list))
+            assert _n_class <= self.n_target, \
+                "The number of classes in contrast_subspace_list should be less than or equal to the number of target supervision."
+            # recode the contrast_subspace_list
+            value_to_code = {val: i for i, val in enumerate(sorted(set(contrast_subspace_list)))}
+            self.contrast_subspace_list = [value_to_code[val] for val in contrast_subspace_list]
 
         # extract target data and kernel
         self.target_data_list = [t.target_data for t in target_supervision_list]
