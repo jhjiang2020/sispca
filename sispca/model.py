@@ -229,7 +229,7 @@ class SISPCA(PCA):
 
         reg_loss = torch.tensor(0.0)
         # the contrastive loss: minimize HSIC between subspaces
-        if self.lambda_contrast.min() > 0:
+        if self.lambda_contrast.max() > 0:
             for i in range(self.n_subspace):
                 for j in range(i + 1, self.n_subspace):
                     # get lambda for subspace i and j
